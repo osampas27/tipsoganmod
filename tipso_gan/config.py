@@ -1,0 +1,31 @@
+from dataclasses import dataclass
+@dataclass
+class TIPSOConfig:
+    input_dim:int=120
+    train_val_test=(0.6,0.2,0.2)
+    swarm_size=80
+    iter_max=150
+    w_min=0.4
+    w_max=0.9
+    c1=2.05
+    c2=2.05
+    stagnation_T=25
+    sigma_share=0.5
+    alpha_share=1.0
+    beta_randn=1e-3
+    k_sigmoid=6.0
+    f_threshold=1e-4
+    delta_t=10
+    focal_alpha=1.0
+    focal_gamma=2.0
+    alpha=0.5
+    beta=0.5
+    gamma=0.0
+    batch_size=128
+    epochs_pretrain=5
+    epochs_tipso=15
+    lr=2e-4
+    val_acc_threshold=0.9995
+    patience_drop=3
+    num_heads=4
+    key_dim=16
