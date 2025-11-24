@@ -6,7 +6,7 @@ from tipso_gan.cicids_loader import load_cicids_csv_preset
 from tipso_gan.metrics import compute_metrics
 def main():
     os.makedirs('artifacts', exist_ok=True)
-    Xtr,ytr,Xv,yv,Xte,yte,feats = load_cicids_csv_preset(['sample_cicids_small.csv'])
+    Xtr,ytr,Xv,yv,Xte,yte,feats = load_cicids_csv_preset(['cicids2018.csv'])
     strategies = ['none','undersample','oversample','class_weight']
     rows = []
     for s in strategies:
