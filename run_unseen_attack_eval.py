@@ -7,7 +7,7 @@ from tipso_gan.cicids_loader import load_with_attack_names
 from tipso_gan.metrics import compute_metrics, save_json
 def main():
     os.makedirs('artifacts', exist_ok=True)
-    X, y, names, feats = load_with_attack_names(['sample_cicids_small.csv'])
+    X, y, names, feats = load_with_attack_names(['cicids2018.csv'])
     y = y.reshape(-1)
     uniq = np.unique(names)
     attacks = [n for n in uniq if str(n).upper() != 'BENIGN']
