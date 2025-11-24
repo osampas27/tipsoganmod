@@ -8,7 +8,7 @@ def split_domain(X, y, fraction=0.5):
     return (X[:k], y[:k]), (X[k:], y[k:])
 def main():
     os.makedirs('artifacts', exist_ok=True)
-    Xtr,ytr,Xv,yv,Xte,yte,feats = load_cicids_csv_preset(['sample_cicids_small.csv'])
+    Xtr,ytr,Xv,yv,Xte,yte,feats = load_cicids_csv_preset(['cicids2018.csv'])
     t_base = TIPSOTrainer(input_dim=Xtr.shape[1])
     (Xa, ya), (Xb, yb) = split_domain(Xtr, ytr, 0.5)
     t_base.pretrain_psogan(Xb[yb.flatten()==0], epochs=cfg.epochs_pretrain, batch_size=cfg.batch_size)
