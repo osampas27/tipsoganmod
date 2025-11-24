@@ -8,7 +8,7 @@ def main():
     cfg.epochs_pretrain = 5
     cfg.epochs_tipso    = 100
     cfg.patience_drop   = 10**9
-    Xtr,ytr,Xv,yv,Xte,yte,feats = load_cicids_csv_preset(['sample_cicids_small.csv'])
+    Xtr,ytr,Xv,yv,Xte,yte,feats = load_cicids_csv_preset(['cicids2018.csv'])
     mask_n = (ytr.flatten()==0)
     Xn = Xtr[mask_n] if mask_n.sum()>=16 else Xtr[:max(16, len(Xtr)//4)]
     t = TIPSOTrainer(input_dim=Xtr.shape[1])
