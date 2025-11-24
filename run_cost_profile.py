@@ -13,7 +13,7 @@ def timed_inference(model, X, repeats=3):
     return (time.perf_counter()-t0)/repeats
 def main():
     os.makedirs('artifacts', exist_ok=True)
-    Xtr,ytr,Xv,yv,Xte,yte,feats = load_cicids_csv_preset(['sample_cicids_small.csv'])
+    Xtr,ytr,Xv,yv,Xte,yte,feats = load_cicids_csv_preset(['cicids2018.csv'])
     t = TIPSOTrainer(input_dim=Xtr.shape[1])
     t.pretrain_psogan(Xtr[ytr.flatten()==0], epochs=cfg.epochs_pretrain, batch_size=cfg.batch_size)
     t.train_tipso(Xtr[ytr.flatten()==0], Xtr, ytr, Xv, yv, epochs=cfg.epochs_tipso, batch_size=cfg.batch_size, balance_strategy='class_weight')
