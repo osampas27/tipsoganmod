@@ -5,7 +5,7 @@ from tipso_gan.train import TIPSOTrainer, cfg
 from tipso_gan.cicids_loader import load_cicids_csv_preset
 from tipso_gan.metrics import compute_metrics
 def train_eval(use_attention: bool):
-    Xtr,ytr,Xv,yv,Xte,yte,feats = load_cicids_csv_preset(['sample_cicids_small.csv'])
+    Xtr,ytr,Xv,yv,Xte,yte,feats = load_cicids_csv_preset(['cicids2018.csv'])
     Xn = Xtr[(ytr.flatten()==0)]
     t = TIPSOTrainer(input_dim=Xtr.shape[1], use_attention=use_attention)
     t.pretrain_psogan(Xn, epochs=cfg.epochs_pretrain, batch_size=cfg.batch_size)
