@@ -14,7 +14,7 @@ from tipso_gan.attacks import feature_bounds_from_data, fgsm, bim, pgd_linf
 def parse_args():
     p = argparse.ArgumentParser("Adaptive attacks against TIPSO-GAN and baselines (NDSS artifact).")
     p.add_argument("--data", "-d", nargs="+", default=None,
-                   help="One or more CICIDS-style CSV files. Defaults to sample_cicids_small.csv.")
+                   help="One or more CICIDS-style CSV files. Defaults to cicids2018.csv.")
     p.add_argument("--eps", type=float, default=0.05, help="L_inf epsilon (per-feature scale).")
     p.add_argument("--iters", type=int, default=10, help="Iterations for BIM/PGD.")
     p.add_argument("--alpha", type=float, default=0.01, help="Step size for BIM/PGD.")
@@ -26,7 +26,7 @@ def resolve_data_files(cli_list):
     if env_val:
         parts = [s for s in env_val.replace(";", ",").split(",") if s.strip()]
         if parts: return parts
-    return ["sample_cicids_small.csv"]
+    return ["cicids2018.csv"]
 
 def train_baselines(Xtr, ytr):
     lr = LogisticRegression(max_iter=500, n_jobs=None)
