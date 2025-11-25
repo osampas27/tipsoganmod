@@ -15,7 +15,7 @@ The package provides a fully executable Python environment to reproduce the pape
 | `ndss_tipso_artifact/tipso_gan/` | Core implementation (trainer, loader, metrics, simple attack routines, config). |
 | `ndss_tipso_artifact/*.py` | Experiment drivers: `run_repro_perf.py`, `run_unseen_attack_eval.py`, `run_transfer.py`, `run_balance_eval.py`, `run_compare_baselines.py`, `run_cost_profile.py`, `run_ablation_pso.py`, `run_ablation_attention.py`, `run_adaptive_attacks.py`. |
 | `cicids2018.csv` | CICIDS-2018 tabular dataset |
-| `ndss_tipso_artifact/artifacts/` | All generated results (CSV/JSON) are written here by each script. |
+| `artifacts/` | All generated results (CSV/JSON) are written here by each script. |
 | `ndss_tipso_artifact/requirements.txt` | Python dependencies (TF 2.15, sklearn, numpy, pandas). |
 | `ndss_tipso_artifact/README.md` | This file. |
 
