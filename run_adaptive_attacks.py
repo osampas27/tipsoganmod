@@ -11,22 +11,60 @@ from tipso_gan.cicids_loader import load_cicids_csv_preset
 from tipso_gan.metrics import compute_metrics, save_json
 from tipso_gan.attacks import feature_bounds_from_data, fgsm, bim, pgd_linf
 
+
 def parse_args():
-    p = argparse.ArgumentParser("Adaptive attacks against TIPSO-GAN and baselines (NDSS artifact).")
-    p.add_argument("--data", "-d", nargs="+", default=None,
-                   help="One or more CICIDS-style CSV files. Defaults to cicids2018.csv.")
+    p = argparse.ArgumentParser(
+        "Adaptive attacks against TIPSO-GAN and baselines (NDSS artifact)."
+    )
+    p.add_argument(
+        "--data", "-d",
+        nargs="+",
+        default=None,
+        help=(
+            "One or more CICIDS-style CSV files. "
+            "Defaults to cicids2018.csv if not provided or via TIPSO_DATA. "
+            "For consistency with run_repro_perf.py, any directory components "
+            "are ignored and only the file name is used (e.g., '/cicids2018.csv' "
+            "is treated as 'cicids2018.csv')."
+        )
+    )
     p.add_argument("--eps", type=float, default=0.05, help="L_inf epsilon (per-feature scale).")
     p.add_argument("--iters", type=int, default=10, help="Iterations for BIM/PGD.")
     p.add_argument("--alpha", type=float, default=0.01, help="Step size for BIM/PGD.")
     return p.parse_args()
 
+
 def resolve_data_files(cli_list):
-    if cli_list: return cli_list
-    env_val = os.environ.get("TIPSO_DATA", "").strip()
-    if env_val:
-        parts = [s for s in env_val.replace(";", ",").split(",") if s.strip()]
-        if parts: return parts
-    return ["cicids2018.csv"]
+    """
+    Make run_adaptive_attacks.py behave like run_repro_perf.py with respect
+    to dataset paths.
+
+    - run_repro_perf.py always calls:
+        load_cicids_csv_preset(['cicids2018.csv'])
+      i.e., it passes only the file name, not a full OS path.
+
+    - To ensure identical behavior (and avoid FileNotFoundError when users
+      pass '/cicids2018.csv'), we:
+        * accept CLI or TIPSO_DATA values,
+        * strip any directory components and leading slashes, and
+        * pass only the basename(s) to load_cicids_csv_preset.
+    """
+    if cli_list:
+        raw_paths = cli_list
+    else:
+        env_val = os.environ.get("TIPSO_DATA", "").strip()
+        if env_val:
+            parts = [s for s in env_val.replace(";", ",").split(",") if s.strip()]
+            raw_paths = parts if parts else ["cicids2018.csv"]
+        else:
+            raw_paths = ["cicids2018.csv"]
+
+    # Critical change: reduce every entry to just its basename
+    # so '/cicids2018.csv' → 'cicids2018.csv', './data/cicids2018.csv' → 'cicids2018.csv'
+    data_files = [os.path.basename(p.strip()) for p in raw_paths]
+
+    return data_files
+
 
 def train_baselines(Xtr, ytr):
     lr = LogisticRegression(max_iter=500, n_jobs=None)
@@ -34,6 +72,7 @@ def train_baselines(Xtr, ytr):
     lr.fit(Xtr, ytr.ravel())
     rf.fit(Xtr, ytr.ravel())
     return lr, rf
+
 
 def eval_model(model, X, y, is_keras=True):
     if is_keras:
@@ -43,16 +82,18 @@ def eval_model(model, X, y, is_keras=True):
         yp = model.predict(X)
     return compute_metrics(y, yp)
 
+
 def main():
     args = parse_args()
     data_files = resolve_data_files(args.data)
     os.makedirs("artifacts", exist_ok=True)
 
-    print(f"[INFO] Using data files: {data_files}")
+    print(f"[INFO] Using data files (logical names): {data_files}")
     Xtr, ytr, Xv, yv, Xte, yte, feats = load_cicids_csv_preset(data_files)
 
     # Bounds for clipping adversarial examples
     xmin, xmax, width = feature_bounds_from_data(Xtr)
+
     # broadcast shapes for TF ops
     import tensorflow as tf
     xmin_tf = tf.convert_to_tensor(xmin, dtype=tf.float32)
@@ -60,11 +101,19 @@ def main():
 
     # Train TIPSO-GAN
     t = TIPSOTrainer(input_dim=Xtr.shape[1])
-    
-    t.pretrain_psogan(Xtr[ytr.flatten()==0], epochs=cfg.epochs_pretrain, batch_size=cfg.batch_size)
-    t.train_tipso(Xtr[ytr.flatten()==0], Xtr, ytr, Xv, yv,
-                  epochs=cfg.epochs_tipso, batch_size=cfg.batch_size,
-                  balance_strategy='class_weight', collect_loss=False)
+
+    t.pretrain_psogan(
+        Xtr[ytr.flatten() == 0],
+        epochs=cfg.epochs_pretrain,
+        batch_size=cfg.batch_size
+    )
+    t.train_tipso(
+        Xtr[ytr.flatten() == 0], Xtr, ytr, Xv, yv,
+        epochs=cfg.epochs_tipso,
+        batch_size=cfg.batch_size,
+        balance_strategy='class_weight',
+        collect_loss=False
+    )
 
     # Train simple baselines
     lr, rf = train_baselines(Xtr, ytr)
@@ -125,33 +174,38 @@ def main():
 
     # Also a CSV summary (accuracy, recall, f1)
     rows = []
-    def pick(m):  # compact summary
+
+    def pick(m):
         return {
             "acc": m.get("accuracy"),
             "prec": m.get("precision"),
             "rec": m.get("recall"),
             "f1": m.get("f1")
         }
-    rows.append(["clean","TIPSO", *pick(clean_tipso).values()])
-    rows.append(["clean","LR",    *pick(clean_lr).values()])
-    rows.append(["clean","RF",    *pick(clean_rf).values()])
 
-    rows.append(["fgsm","TIPSO", *pick(fgsm_tipso).values()])
-    rows.append(["fgsm","LR",    *pick(fgsm_lr).values()])
-    rows.append(["fgsm","RF",    *pick(fgsm_rf).values()])
+    rows.append(["clean", "TIPSO", *pick(clean_tipso).values()])
+    rows.append(["clean", "LR",    *pick(clean_lr).values()])
+    rows.append(["clean", "RF",    *pick(clean_rf).values()])
 
-    rows.append(["bim","TIPSO", *pick(bim_tipso).values()])
-    rows.append(["bim","LR",    *pick(bim_lr).values()])
-    rows.append(["bim","RF",    *pick(bim_rf).values()])
+    rows.append(["fgsm", "TIPSO", *pick(fgsm_tipso).values()])
+    rows.append(["fgsm", "LR",    *pick(fgsm_lr).values()])
+    rows.append(["fgsm", "RF",    *pick(fgsm_rf).values()])
 
-    rows.append(["pgd","TIPSO", *pick(pgd_tipso).values()])
-    rows.append(["pgd","LR",    *pick(pgd_lr).values()])
-    rows.append(["pgd","RF",    *pick(pgd_rf).values()])
+    rows.append(["bim", "TIPSO", *pick(bim_tipso).values()])
+    rows.append(["bim", "LR",    *pick(bim_lr).values()])
+    rows.append(["bim", "RF",    *pick(bim_rf).values()])
 
-    with open("artifacts/adaptive_attacks_summary.csv","w",newline="",encoding="utf-8") as f:
-        w = csv.writer(f); w.writerow(["attack","model","acc","prec","rec","f1"]); w.writerows(rows)
+    rows.append(["pgd", "TIPSO", *pick(pgd_tipso).values()])
+    rows.append(["pgd", "LR",    *pick(pgd_lr).values()])
+    rows.append(["pgd", "RF",    *pick(pgd_rf).values()])
+
+    with open("artifacts/adaptive_attacks_summary.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["attack", "model", "acc", "prec", "rec", "f1"])
+        w.writerows(rows)
 
     print("Wrote artifacts/adaptive_attacks_summary.csv")
+
 
 if __name__ == "__main__":
     main()
