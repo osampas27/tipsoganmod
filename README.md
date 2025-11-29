@@ -156,5 +156,8 @@ Times scale with dataset size and hardware resource capacity; bigger datasets ta
 | CSV schema mismatch | Ensure features are `f0..fK` and there’s a `label` column |
 
 ---
+© 2025 The Authors. All rights reserved.
+
+The authors retain full copyright over all materials contained in this repository and its associated Zenodo record (DOI: https://doi.org/10.5281/zenodo.17759517).
 
 *End of README.md*
