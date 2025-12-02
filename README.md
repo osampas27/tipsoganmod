@@ -156,6 +156,35 @@ Times scale with dataset size and hardware resource capacity; bigger datasets ta
 | CSV schema mismatch | Ensure features are `f0..fK` and there’s a `label` column |
 
 ---
+
+## Datasets and CSV configuration files
+
+We do not bundle the full datasets directly in this repository due to size constraints. Instead, we provide **one small CSV configuration file per dataset**, each containing:
+
+- The official download links for the dataset files
+- Any comments/notes needed to prepare them for TIPSO-GAN
+
+The following CSV configuration files are included:
+
+- `cicids2018.csv`
+- `cicddos2019.csv`
+- `cicaptiiot.csv`
+
+Each evaluation script accepts one or more of these CSV configuration files via the `--data/-d` argument:
+
+```python
+p.add_argument(
+    "--data", "-d",
+    nargs="+",
+    default=["cicids2018.csv", "cicddos2019.csv", "cicaptiiot.csv"],
+    help=(
+        "One or more CIC-style CSV files, e.g.\n"
+        "  -d cicids2018.csv cicddos2019.csv cicaptiiot.csv\n"
+        "Each dataset is processed separately and gets its own baselines_perf_<base>.json."
+    ),
+)
+
+---
 © 2025 The Authors. All rights reserved.
 
 The authors retain full copyright over all materials contained in this repository and its associated Zenodo record (DOI: https://doi.org/10.5281/zenodo.17759517).
