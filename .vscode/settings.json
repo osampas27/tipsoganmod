@@ -1,0 +1,7 @@
+{
+  "python.defaultInterpreterPath": "C:\\\\Users\\\\Administrator\\\\anaconda3\\\\python.exe",
+  "python.analysis.extraPaths": [
+    "."
+  ],
+  "terminal.integrated.defaultProfile.windows": "Command Prompt"
+}
