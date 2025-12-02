@@ -1,0 +1,5 @@
+NDSS Artifact Quickstart (TIPSO-GAN)
+
+Install: -m pip install -r requirements.txt
+Core: run_repro_perf.py, run_loss_curves.py, run_transfer.py, run_balance_eval.py
+Extra: run_unseen_attack_eval.py, run_ablation_pso.py, run_compare_baselines.py, run_cost_profile.py, run_ablation_attention.py
