@@ -170,6 +170,7 @@ The following CSV configuration files are included:
 - `cicddos2019.csv`
 - `cicaptiiot.csv`
 
+By default, the scripts process all three datasets in one run.
 Each evaluation script accepts one or more of these CSV configuration files via the `--data/-d` argument:
 
 ```python
