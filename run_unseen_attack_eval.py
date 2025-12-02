@@ -19,7 +19,7 @@ def parse_args():
     p.add_argument(
         "--data", "-d",
         nargs="+",
-        default=["cicids2018.csv"],
+        default=["cicids2018.csv", "cicddos2019.csv", "cicaptiiot.csv"],
         help=(
             "One or more CIC-style CSV files with attack names, e.g.\n"
             "  -d cicids2018.csv cicddos2019.csv cicapt_iiot_2024.csv\n"
