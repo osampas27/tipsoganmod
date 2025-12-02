@@ -1,8 +1,9 @@
-# ndss_tipso_artifact_v3_2/run_adaptive_attacks.py
+#!/usr/bin/env python3
 import os, sys, json, csv, argparse
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 import numpy as np
+import tensorflow as tf
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 
@@ -12,199 +13,190 @@ from tipso_gan.metrics import compute_metrics, save_json
 from tipso_gan.attacks import feature_bounds_from_data, fgsm, bim, pgd_linf
 
 
+# ===========================================================
+#   PARSE ARGUMENTS
+# ===========================================================
 def parse_args():
-    p = argparse.ArgumentParser(
-        "Adaptive attacks against TIPSO-GAN and baselines (NDSS artifact)."
-    )
+    p = argparse.ArgumentParser("Multi-dataset adaptive attack evaluation for TIPSO-GAN.")
     p.add_argument(
         "--data", "-d",
         nargs="+",
-        default=None,
-        help=(
-            "One or more CICIDS-style CSV files. "
-            "Defaults to cicids2018.csv if not provided or via TIPSO_DATA. "
-            "For consistency with run_repro_perf.py, any directory components "
-            "are ignored and only the file name is used (e.g., '/cicids2018.csv' "
-            "is treated as 'cicids2018.csv')."
-        )
+        default=["cicids2018.csv", "cicddos2019.csv", "cicaptiiot.csv"],
+        help="One or more CIC-style CSV files."
     )
-    p.add_argument("--eps", type=float, default=0.05, help="L_inf epsilon (per-feature scale).")
+    p.add_argument("--eps", type=float, default=0.05, help="L∞ epsilon.")
     p.add_argument("--iters", type=int, default=10, help="Iterations for BIM/PGD.")
     p.add_argument("--alpha", type=float, default=0.01, help="Step size for BIM/PGD.")
     return p.parse_args()
 
 
-def resolve_data_files(cli_list):
-    """
-    Make run_adaptive_attacks.py behave like run_repro_perf.py with respect
-    to dataset paths.
-
-    - run_repro_perf.py always calls:
-        load_cicids_csv_preset(['cicids2018.csv'])
-      i.e., it passes only the file name, not a full OS path.
-
-    - To ensure identical behavior (and avoid FileNotFoundError when users
-      pass '/cicids2018.csv'), we:
-        * accept CLI or TIPSO_DATA values,
-        * strip any directory components and leading slashes, and
-        * pass only the basename(s) to load_cicids_csv_preset.
-    """
-    if cli_list:
-        raw_paths = cli_list
-    else:
-        env_val = os.environ.get("TIPSO_DATA", "").strip()
-        if env_val:
-            parts = [s for s in env_val.replace(";", ",").split(",") if s.strip()]
-            raw_paths = parts if parts else ["cicids2018.csv"]
-        else:
-            raw_paths = ["cicids2018.csv"]
-
-    # Critical change: reduce every entry to just its basename
-    # so '/cicids2018.csv' → 'cicids2018.csv', './data/cicids2018.csv' → 'cicids2018.csv'
-    data_files = [os.path.basename(p.strip()) for p in raw_paths]
-
-    return data_files
-
-
+# ===========================================================
+#   SAFELY TRAIN BASELINES
+# ===========================================================
 def train_baselines(Xtr, ytr):
-    lr = LogisticRegression(max_iter=500, n_jobs=None)
+    y_unique = np.unique(ytr)
+
+    # If dataset contains only one class → skip baselines
+    if len(y_unique) < 2:
+        print("[WARN] Baselines skipped: dataset contains only ONE class.")
+        return None, None
+
+    lr = LogisticRegression(max_iter=500)
     rf = RandomForestClassifier(n_estimators=200, n_jobs=-1, random_state=42)
+
     lr.fit(Xtr, ytr.ravel())
     rf.fit(Xtr, ytr.ravel())
+
     return lr, rf
 
 
-def eval_model(model, X, y, is_keras=True):
-    if is_keras:
-        probs = model.predict(X, verbose=0)
-        yp = probs.argmax(axis=1)
-    else:
-        yp = model.predict(X)
-    return compute_metrics(y, yp)
+# ===========================================================
+#   SAFE EVALUATION
+# ===========================================================
+def safe_eval(model, X, y, is_keras):
+    """Return None-metrics if baseline is missing."""
+    if model is None:
+        return {"accuracy": None, "precision": None, "recall": None, "f1": None}, None
+    return compute_metrics(y, model.predict(X) if not is_keras else model.predict(X, verbose=0).argmax(axis=1))
 
 
-def main():
-    args = parse_args()
-    data_files = resolve_data_files(args.data)
-    os.makedirs("artifacts", exist_ok=True)
+# ===========================================================
+#   RUN ADAPTIVE ATTACKS FOR ONE DATASET
+# ===========================================================
+def run_for_dataset(data_file, eps, alpha, iters):
+    base = os.path.splitext(os.path.basename(data_file))[0]
+    print(f"\n[INFO] === Running Adaptive Attacks for: {base} ===")
 
-    print(f"[INFO] Using data files (logical names): {data_files}")
-    Xtr, ytr, Xv, yv, Xte, yte, feats = load_cicids_csv_preset(data_files)
+    # Dedicated folder per dataset
+    outdir = os.path.join("artifacts", base)
+    os.makedirs(outdir, exist_ok=True)
 
-    # Bounds for clipping adversarial examples
+    # Load dataset
+    Xtr, ytr, Xv, yv, Xte, yte, feats = load_cicids_csv_preset([data_file])
+
+    # Compute bounds
     xmin, xmax, width = feature_bounds_from_data(Xtr)
+    xmin_tf = tf.constant(xmin, dtype=tf.float32)
+    xmax_tf = tf.constant(xmax, dtype=tf.float32)
 
-    # broadcast shapes for TF ops
-    import tensorflow as tf
-    xmin_tf = tf.convert_to_tensor(xmin, dtype=tf.float32)
-    xmax_tf = tf.convert_to_tensor(xmax, dtype=tf.float32)
-
-    # Train TIPSO-GAN
+    # =======================================================
+    #   TRAIN TIPSO-GAN
+    # =======================================================
+    print("[INFO] Training TIPSO-GAN...")
     t = TIPSOTrainer(input_dim=Xtr.shape[1])
+    normals = Xtr[ytr.flatten() == 0]
 
-    t.pretrain_psogan(
-        Xtr[ytr.flatten() == 0],
-        epochs=cfg.epochs_pretrain,
-        batch_size=cfg.batch_size
-    )
+    if normals.shape[0] < 16:
+        print("[WARN] Few/no normal samples → using fallback tiling.")
+        normals = np.tile(Xtr[:max(16, len(Xtr)//4)], (2,1))
+
+    t.pretrain_psogan(normals, epochs=cfg.epochs_pretrain, batch_size=cfg.batch_size)
     t.train_tipso(
-        Xtr[ytr.flatten() == 0], Xtr, ytr, Xv, yv,
+        normals,
+        Xtr, ytr,
+        Xv, yv,
         epochs=cfg.epochs_tipso,
         batch_size=cfg.batch_size,
-        balance_strategy='class_weight',
-        collect_loss=False
+        balance_strategy="class_weight"
     )
 
-    # Train simple baselines
+    # =======================================================
+    #   TRAIN BASELINES (LR/RF)
+    # =======================================================
     lr, rf = train_baselines(Xtr, ytr)
 
-    # Clean metrics
-    clean_tipso, _ = eval_model(t.dee, Xte, yte, is_keras=True)
-    clean_lr,   _  = eval_model(lr,   Xte, yte, is_keras=False)
-    clean_rf,   _  = eval_model(rf,   Xte, yte, is_keras=False)
+    # =======================================================
+    #   CLEAN PERFORMANCE
+    # =======================================================
+    clean_tipso, _ = compute_metrics(
+        yte, t.dee.predict(Xte, verbose=0).argmax(axis=1)
+    )
 
-    # Craft adversarial examples (white-box for TIPSO; transfer to baselines)
-    eps   = np.float32(args.eps)
-    alpha = np.float32(args.alpha)
-    iters = int(args.iters)
+    clean_lr, _ = safe_eval(lr, Xte, yte, is_keras=False)
+    clean_rf, _ = safe_eval(rf, Xte, yte, is_keras=False)
 
+    # =======================================================
+    #   CRAFT FGSM/BIM/PGD
+    # =======================================================
+    print("[INFO] Generating adversarial samples...")
     Xte_fgsm = fgsm(t.dee, Xte, yte, eps, xmin_tf, xmax_tf)
-    Xte_bim  = bim(t.dee,  Xte, yte, eps, alpha, iters, xmin_tf, xmax_tf)
+    Xte_bim  = bim(t.dee, Xte, yte, eps, alpha, iters, xmin_tf, xmax_tf)
     Xte_pgd  = pgd_linf(t.dee, Xte, yte, eps, alpha, iters, xmin_tf, xmax_tf, random_start=True)
 
-    # Evaluate under attack (white-box for TIPSO; transfer attacks for LR/RF)
-    fgsm_tipso, _ = eval_model(t.dee, Xte_fgsm, yte, is_keras=True)
-    bim_tipso,  _ = eval_model(t.dee, Xte_bim,  yte, is_keras=True)
-    pgd_tipso,  _ = eval_model(t.dee, Xte_pgd,  yte, is_keras=True)
+    # =======================================================
+    #   EVALUATE ATTACKS
+    # =======================================================
+    fgsm_tipso, _ = compute_metrics(yte, t.dee.predict(Xte_fgsm, verbose=0).argmax(axis=1))
+    bim_tipso,  _ = compute_metrics(yte, t.dee.predict(Xte_bim,  verbose=0).argmax(axis=1))
+    pgd_tipso,  _ = compute_metrics(yte, t.dee.predict(Xte_pgd,  verbose=0).argmax(axis=1))
 
-    fgsm_lr, _ = eval_model(lr, Xte_fgsm, yte, is_keras=False)
-    bim_lr,  _ = eval_model(lr, Xte_bim,  yte, is_keras=False)
-    pgd_lr,  _ = eval_model(lr, Xte_pgd,  yte, is_keras=False)
+    fgsm_lr, _ = safe_eval(lr, Xte_fgsm, yte, is_keras=False)
+    bim_lr,  _ = safe_eval(lr, Xte_bim,  yte, is_keras=False)
+    pgd_lr,  _ = safe_eval(lr, Xte_pgd,  yte, is_keras=False)
 
-    fgsm_rf, _ = eval_model(rf, Xte_fgsm, yte, is_keras=False)
-    bim_rf,  _ = eval_model(rf, Xte_bim,  yte, is_keras=False)
-    pgd_rf,  _ = eval_model(rf, Xte_pgd,  yte, is_keras=False)
+    fgsm_rf, _ = safe_eval(rf, Xte_fgsm, yte, is_keras=False)
+    bim_rf,  _ = safe_eval(rf, Xte_bim,  yte, is_keras=False)
+    pgd_rf,  _ = safe_eval(rf, Xte_pgd,  yte, is_keras=False)
 
-    # Save JSON report
+    # =======================================================
+    #   SAVE JSON REPORT
+    # =======================================================
     report = {
+        "dataset": base,
         "params": {"eps": float(eps), "alpha": float(alpha), "iters": iters},
-        "clean": {
-            "TIPSO": clean_tipso,
-            "LR": clean_lr,
-            "RF": clean_rf
-        },
-        "fgsm": {
-            "TIPSO": fgsm_tipso,
-            "LR": fgsm_lr,
-            "RF": fgsm_rf
-        },
-        "bim": {
-            "TIPSO": bim_tipso,
-            "LR": bim_lr,
-            "RF": bim_rf
-        },
-        "pgd": {
-            "TIPSO": pgd_tipso,
-            "LR": pgd_lr,
-            "RF": pgd_rf
-        }
+        "clean": {"TIPSO": clean_tipso, "LR": clean_lr, "RF": clean_rf},
+        "fgsm":  {"TIPSO": fgsm_tipso, "LR": fgsm_lr, "RF": fgsm_rf},
+        "bim":   {"TIPSO": bim_tipso,  "LR": bim_lr,  "RF": bim_rf},
+        "pgd":   {"TIPSO": pgd_tipso,  "LR": pgd_lr,  "RF": pgd_rf}
     }
-    save_json("artifacts/adaptive_attacks_report.json", report)
-    print("Wrote artifacts/adaptive_attacks_report.json")
 
-    # Also a CSV summary (accuracy, recall, f1)
+    save_json(os.path.join(outdir, "adaptive_attacks_report.json"), report)
+    print(f"[OK] Saved → {outdir}/adaptive_attacks_report.json")
+
+    # =======================================================
+    #   SAVE CSV SUMMARY
+    # =======================================================
     rows = []
 
-    def pick(m):
-        return {
-            "acc": m.get("accuracy"),
-            "prec": m.get("precision"),
-            "rec": m.get("recall"),
-            "f1": m.get("f1")
-        }
+    def row(name, model, metrics):
+        rows.append([name, model, metrics.get("accuracy"), metrics.get("precision"),
+                     metrics.get("recall"), metrics.get("f1")])
 
-    rows.append(["clean", "TIPSO", *pick(clean_tipso).values()])
-    rows.append(["clean", "LR",    *pick(clean_lr).values()])
-    rows.append(["clean", "RF",    *pick(clean_rf).values()])
+    row("clean", "TIPSO", clean_tipso)
+    row("clean", "LR", clean_lr)
+    row("clean", "RF", clean_rf)
 
-    rows.append(["fgsm", "TIPSO", *pick(fgsm_tipso).values()])
-    rows.append(["fgsm", "LR",    *pick(fgsm_lr).values()])
-    rows.append(["fgsm", "RF",    *pick(fgsm_rf).values()])
+    row("fgsm", "TIPSO", fgsm_tipso)
+    row("fgsm", "LR", fgsm_lr)
+    row("fgsm", "RF", fgsm_rf)
 
-    rows.append(["bim", "TIPSO", *pick(bim_tipso).values()])
-    rows.append(["bim", "LR",    *pick(bim_lr).values()])
-    rows.append(["bim", "RF",    *pick(bim_rf).values()])
+    row("bim", "TIPSO", bim_tipso)
+    row("bim", "LR", bim_lr)
+    row("bim", "RF", bim_rf)
 
-    rows.append(["pgd", "TIPSO", *pick(pgd_tipso).values()])
-    rows.append(["pgd", "LR",    *pick(pgd_lr).values()])
-    rows.append(["pgd", "RF",    *pick(pgd_rf).values()])
+    row("pgd", "TIPSO", pgd_tipso)
+    row("pgd", "LR", pgd_lr)
+    row("pgd", "RF", pgd_rf)
 
-    with open("artifacts/adaptive_attacks_summary.csv", "w", newline="", encoding="utf-8") as f:
+    with open(os.path.join(outdir, "adaptive_attacks_summary.csv"), "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["attack", "model", "acc", "prec", "rec", "f1"])
         w.writerows(rows)
 
-    print("Wrote artifacts/adaptive_attacks_summary.csv")
+    print(f"[OK] Saved → {outdir}/adaptive_attacks_summary.csv")
+
+
+# ===========================================================
+#   MAIN
+# ===========================================================
+def main():
+    args = parse_args()
+    print("[INFO] Running Adaptive Attacks on datasets:", args.data)
+
+    for df in args.data:
+        run_for_dataset(df, args.eps, args.alpha, args.iters)
+
+    print("\n[DONE] All datasets processed successfully.\n")
 
 
 if __name__ == "__main__":
