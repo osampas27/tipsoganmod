@@ -13,8 +13,10 @@ The package provides a fully executable Python environment to reproduce the pape
 | Path | What it contains |
 |---|---|
 | `ndss_tipso_artifact/tipso_gan/` | Core implementation (trainer, loader, metrics, simple attack routines, config). |
-| `ndss_tipso_artifact/*.py` | Experiment drivers: `run_repro_perf.py`, `run_unseen_attack_eval.py`, `run_transfer.py`, `run_balance_eval.py`, `run_compare_baselines.py`, `run_cost_profile.py`, `run_ablation_pso.py`, `run_ablation_attention.py`, `run_adaptive_attacks.py`. |
+| `ndss_tipso_artifact/*.py` | Experiment drivers: `run_repro_perf.py`, `run_unseen_attack_eval.py`, `run_transfer.py`, `run_balance_eval.py`, `run_compare_baselines.py`, `run_cost_profile.py`, `run_ablation_pso.py`, `run_ablation_attention.py`, `run_adaptive_attacks.py`, 'plot_adaptive_attacks.py', 'plot_cost_profile.py', 'plot_loss_curves.py', 'plot_transfer_performance.py'. |
 | `cicids2018.csv` | CICIDS-2018 tabular dataset |
+| `cicddos2019.csv` | link to cicddos-2019 tabular dataset |
+| `cicaptiiot.csv` | link to CICAPT-IIoT2024 tabular dataset |
 | `artifacts/` | All generated results (CSV/JSON) are written here by each script. |
 | `ndss_tipso_artifact/requirements.txt` | Python dependencies (TF 2.15, sklearn, numpy, pandas). |
 | `ndss_tipso_artifact/README.md` | This file. |
@@ -112,12 +114,38 @@ ndss_tipso_artifact/artifacts/
  ├── perf_summary.json
  ├── confusion_matrix.json
  ├── loss_history.csv
- ├── dee_transfer_report.json
+ │
  ├── balance_grid.csv
  ├── baselines_perf.json
  ├── cost_metrics.json
+ │
+ ├── dee_transfer_report.json
+ ├── dee_transfer_report_cicids2018.json
+ ├── dee_transfer_report_cicddos2019.json
+ ├── dee_transfer_report_cicaptiiot.json
+ │
  ├── adaptive_attacks_report.json
- └── adaptive_attacks_summary.csv
+ ├── adaptive_attacks_summary.csv
+ │
+ ├── plots/
+ │   ├── transfer_performance_cicids2018.png
+ │   ├── transfer_performance_cicddos2019.png
+ │   ├── transfer_performance_cicaptiiot.png
+ │   │
+ │   ├── cost_profile.png
+ │   ├── cost_profile.pdf
+ │   │
+ │   ├── loss_curve_cicids2018.png
+ │   ├── loss_curve_cicddos2019.png
+ │   ├── loss_curve_cicaptiiot.png
+ │   │
+ │   ├── adaptive_fgsm.png
+ │   ├── adaptive_bim.png
+ │   ├── adaptive_pgd.png
+ │   └── adaptive_summary_bar.png
+ │
+ └── y_test.npy   (safe to keep, harmless if needed later)
+
 ```
 
 * `perf_summary.json`: accuracy/precision/recall/F1 + train/test wall times (C1) 
@@ -129,14 +157,17 @@ ndss_tipso_artifact/artifacts/
 ## 🧾 Mapping to Paper Results
 Each `run_*.py` script validates one or more paper claims (C1–C5). All outputs land in `artifacts/`.
 
-| Claim | Summary | Validated by |
-| ------ | -------- | ------------ |
-| C1 | Table II: TIPSO-GAN achieves competitive detection metrics. | `run_repro_perf.py`, `run_compare_baselines.py` -> `perf_summary.json`| `run_cost_profile.py` | `cost_metrics.json` |
-| C2 | Fig. 7: Training performance of TIPSO-GAN compared with four GAN variants | `run_loss_curves.py` → `loss_history.csv` |
-| C3 | Fig. 8: Performance of TIPSO-GAN under different adaptive attacks. | `run_adaptive_attacks.py` -> `adaptive_attacks_report.json`, `adaptive_attacks_summary.csv`|
-| C4 | Fig. 9: Performance of TIPSO-GAN with/without transfer learning. | `run_transfer.py` -> `dee_transfer_report.json` |
-| C5 | Fig. 10: Class balancing improves minority detection. | `run_balance_eval.py` -> `balance_grid.csv` | 
+All scripts map directly to paper claims (C1–C5), and all outputs are saved
+into per-dataset folders under artifacts/.
 
+| Claim | Summary | Validated By | Output Files |
+|------|---------|--------------|--------------|
+| C1 | TIPSO-GAN achieves strong detection metrics (Table II). | run_repro_perf.py, run_compare_baselines.py | perf_summary_multi.json, baselines_perf_*.json, confusion_matrix_*.json |
+| C2 | Training curves of TIPSO-GAN (Fig. 7). | run_loss_curves.py | loss_history_*.csv, loss_curves_*.png |
+| C3 | Robustness under FGSM, BIM, PGD (Fig. 8). | run_adaptive_attacks.py | adaptive_attacks_report.json, adaptive_attacks_summary.csv, adaptive_attacks_*.png |
+| C4 | Transfer-learning benefit (Fig. 9). | run_transfer.py | dee_transfer_report_*.json, transfer_*.png |
+| C5 | Effect of class-balance strategies (Fig. 10). | run_balance_eval.py | balance_grid_*.csv, preds_*.npy |
+| — | Cost/latency analysis. | run_cost_profile.py | cost_metrics_*.json, cost_latency.png |
 ---
 
 ## ⏱ Time Budget
