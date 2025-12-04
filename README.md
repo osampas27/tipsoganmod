@@ -215,7 +215,7 @@ p.add_argument(
         "Each dataset is processed separately and gets its own baselines_perf_<base>.json."
     ),
 )
-
+For CIC-DDoS2019 and CICAPT-IIoT, the CSV files included here serve as placeholders and contain only hyperlinks to the official dataset repositories. Users should download the full datasets from the linked sources before running the corresponding scripts.
 ---
 © 2025 The Authors. All rights reserved.
 
