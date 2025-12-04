@@ -190,7 +190,9 @@ Times scale with dataset size and hardware resource capacity; bigger datasets ta
 
 ## Datasets and CSV configuration files
 
-We do not bundle the full datasets directly in this repository due to size constraints. Instead, we provide **one small CSV configuration file per dataset**, each containing:
+For CIC-DDoS2019 and CICAPT-IIoT, the CSV files included here serve as placeholders and contain only hyperlinks to the official dataset repositories. 
+Users should download the full datasets from the linked sources before running the corresponding scripts.
+We provide **the full dataset for cicids2018**, For cicddos2019 and cicaptiiot, each contain:
 
 - The official download links for the dataset files
 - Any comments/notes needed to prepare them for TIPSO-GAN
@@ -215,7 +217,6 @@ p.add_argument(
         "Each dataset is processed separately and gets its own baselines_perf_<base>.json."
     ),
 )
-For CIC-DDoS2019 and CICAPT-IIoT, the CSV files included here serve as placeholders and contain only hyperlinks to the official dataset repositories. Users should download the full datasets from the linked sources before running the corresponding scripts.
 ---
 © 2025 The Authors. All rights reserved.
 
